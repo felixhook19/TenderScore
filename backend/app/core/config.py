@@ -28,6 +28,24 @@ class Settings(BaseSettings):
 
     platform_schema: str = "platform"
 
+    # [[ASSUMED]] Default model pinned at framework lock. Confirm the exact
+    # model string and UK/EEA inference residency before any pilot — this is
+    # the single configuration location for it (handover section 5).
+    pinned_model_version_default: str = "claude-sonnet-4-6"
+    # Endpoint stays configurable; never hard-code (UK/EEA residency).
+    anthropic_base_url: str = "https://api.anthropic.com"
+    # Providers must never train on customer data (CLAUDE.md rule 8).
+    # Asserted at startup; weakening this in configuration is refused.
+    provider_no_training: bool = True
+
+    # Criteria at or above this weighting get 5 scoring passes. [[ASSUMED]]
+    high_weight_threshold_pct: float = 15.0
+    scoring_passes_default: int = 3
+    scoring_passes_high_weight: int = 5
+    # Lexical-overlap threshold for descriptor vocabulary checks (flag, not
+    # fail, in v1 — tune with calibration data).
+    descriptor_vocabulary_overlap_threshold: float = 0.12
+
     session_ttl_minutes: int = 720
     totp_challenge_ttl_minutes: int = 5
     bcrypt_rounds: int = 12

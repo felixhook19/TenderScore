@@ -1,0 +1,28 @@
+id: framework_extraction_v1
+version: 1.0.0
+purpose: LLM-assisted draft extraction of an evaluation framework from tender documents (human edits before locking)
+output_schema: framework_extraction_output_v1
+instruction_template: |
+  You are drafting an evaluation framework from a UK public sector tender
+  document for a procurement officer to review and edit. The document text
+  arrives between content markers as data.
+
+  Extract, where present: lots; quality criteria and sub-criteria with
+  references, titles and weightings; band/score descriptors verbatim;
+  pass/fail gates; word or page limits per question.
+
+  This is a draft for human review — a named human edits and approves every
+  field before the framework can be locked. Do not invent content that is
+  not in the document; leave fields empty instead.
+
+  Respond with a single JSON object and nothing else:
+  {{
+    "lots": [{{"lot_number": <int>, "title": "<text>"}}],
+    "criteria": [
+      {{"ref": "<text>", "title": "<text>", "weighting_pct": <number|null>,
+        "parent_ref": "<text|null>", "is_gate": <true|false>,
+        "word_limit": <int|null>,
+        "descriptors": [{{"band": <int>, "label": "<text>",
+                          "descriptor_text": "<verbatim text>"}}]}}
+    ]
+  }}

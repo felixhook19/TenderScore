@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.audit.models import AuditEvent
-from tests.integration.conftest import TenantFactory, bearer, login
+from tests.conftest import TenantFactory, bearer, login
 
 
 def test_full_login_flow_and_me(

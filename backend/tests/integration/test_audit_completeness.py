@@ -1,20 +1,23 @@
-"""M1 exit criterion: the audit-completeness test.
+"""The audit-completeness test (CI quality gate 5).
 
-Exercises every mutating route in the application, asserts each successful
-state change emits at least one audit event, verifies the chain afterwards,
-and fails if a mutating route exists that this suite does not cover — so
-adding an endpoint without extending this test breaks CI by design.
+Walks the entire product through the API — framework set-up, ingestion,
+calibration, scoring, moderation, pack generation, anonymisation reveal —
+asserting that every mutating route emits at least one audit event, that no
+mutating route exists outside this walk, and that the tenant's hash chain
+verifies afterwards.
 
 Also proves both enforcement layers against an endpoint that "forgets" to
 emit: the session dependency rolls the write back, and the middleware
 refuses to report success.
 """
 
+import io
 import uuid
 from collections.abc import Iterator
 from typing import Annotated
 
 import pytest
+from docx import Document
 from fastapi import Depends, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -27,7 +30,14 @@ from app.auth.deps import get_db
 from app.auth.roles import PRIVILEGE_ANONYMISATION_MAP_READ
 from app.main import create_app
 from app.tenancy.models import Tenant
-from tests.integration.conftest import TenantFactory, bearer, login
+from tests.conftest import TenantFactory, bearer, login, run_all_jobs
+from tests.support.fake_llm import OracleResponder
+
+SUBMISSION_TEXT = """Question Q1
+Our mobilisation plan names a lead for every workstream and completes
+equipment commissioning within thirty days. Weekly reviews report progress
+and exceptions to the council's contract manager throughout mobilisation.
+"""
 
 
 def _event_count(db_session: Session) -> int:
@@ -47,99 +57,288 @@ def _mutating_routes(app: FastAPI) -> set[tuple[str, str]]:
 
 
 def test_every_mutating_route_emits_audit_events(
-    client: TestClient, make_tenant_with_admin: TenantFactory, db_session: Session
+    client: TestClient,
+    make_tenant_with_admin: TenantFactory,
+    db_session: Session,
+    memory_storage: object,
+    use_fake_llm: object,
 ) -> None:
+    use_fake_llm.install(OracleResponder(default_score=3))  # type: ignore[attr-defined]
     provisioned = make_tenant_with_admin()
     covered: set[tuple[str, str]] = set()
 
-    def call_and_assert_audited(
+    def call(
         method: str, path: str, route_path: str, expected_status: int, **kwargs: object
-    ) -> dict[str, object]:
+    ) -> dict[str, object] | list[object]:
         before = _event_count(db_session)
         response = client.request(method, path, **kwargs)  # type: ignore[arg-type]
         assert response.status_code == expected_status, (
             f"{method} {path}: {response.status_code} {response.text}"
         )
         db_session.expire_all()
-        after = _event_count(db_session)
-        assert after > before, (
+        assert _event_count(db_session) > before, (
             f"{method} {route_path} completed without emitting an audit event."
         )
         covered.add((method, route_path))
-        return dict(response.json()) if response.content else {}
+        if not response.content:
+            return {}
+        body = response.json()
+        return body  # type: ignore[no-any-return]
 
-    # /auth/login and /auth/totp (the login helper exercises both, audited).
+    # --- Authentication ---------------------------------------------------
     before = _event_count(db_session)
     token = login(client, provisioned.admin, provisioned.admin_password)
     db_session.expire_all()
     assert _event_count(db_session) >= before + 2
     covered.add(("POST", "/auth/login"))
     covered.add(("POST", "/auth/totp"))
-
     headers = bearer(token)
 
-    created = call_and_assert_audited(
+    # --- User, role and privilege administration ---------------------------
+    created_user = call(
         "POST",
         "/users",
         "/users",
         201,
         headers=headers,
         json={
-            "email": f"completeness-{uuid.uuid4().hex[:8]}@example.org",
-            "display_name": "Completeness Probe",
+            "email": f"walk-{uuid.uuid4().hex[:8]}@example.org",
+            "display_name": "Walk Probe",
             "password": "a-valid-password-123",
         },
     )
-    user_id = str(created["id"])
-
-    call_and_assert_audited(
-        "POST",
-        f"/users/{user_id}/roles",
-        "/users/{user_id}/roles",
-        204,
-        headers=headers,
-        json={"role": "evaluator"},
+    user_id = str(created_user["id"])  # type: ignore[call-overload]
+    call(
+        "POST", f"/users/{user_id}/roles", "/users/{user_id}/roles", 204,
+        headers=headers, json={"role": "evaluator"},
     )
-    call_and_assert_audited(
-        "DELETE",
-        f"/users/{user_id}/roles/evaluator",
-        "/users/{user_id}/roles/{role}",
-        204,
-        headers=headers,
+    call(
+        "DELETE", f"/users/{user_id}/roles/evaluator", "/users/{user_id}/roles/{role}",
+        204, headers=headers,
     )
-    call_and_assert_audited(
-        "POST",
-        f"/users/{user_id}/privileges",
-        "/users/{user_id}/privileges",
-        204,
-        headers=headers,
-        json={"privilege": PRIVILEGE_ANONYMISATION_MAP_READ},
+    call(
+        "POST", f"/users/{user_id}/privileges", "/users/{user_id}/privileges", 204,
+        headers=headers, json={"privilege": PRIVILEGE_ANONYMISATION_MAP_READ},
     )
-    call_and_assert_audited(
+    call(
         "DELETE",
         f"/users/{user_id}/privileges/{PRIVILEGE_ANONYMISATION_MAP_READ}",
         "/users/{user_id}/privileges/{privilege}",
         204,
         headers=headers,
     )
-
-    # Coverage check: every mutating route in the app must be exercised here.
-    app = client.app
-    uncovered = _mutating_routes(app) - covered  # type: ignore[arg-type]
-    assert not uncovered, (
-        f"Mutating routes not covered by the audit-completeness test: {uncovered}. "
-        "Extend this test when adding endpoints."
+    # The admin needs the reveal privilege later in the walk.
+    client.post(
+        f"/users/{provisioned.admin.id}/privileges",
+        headers=headers,
+        json={"privilege": PRIVILEGE_ANONYMISATION_MAP_READ},
     )
 
-    # And this tenant's chain must verify end to end after all of the above.
-    # (Other chains in the shared test database are deliberately corrupted by
-    # the tamper-detection tests, so verification is scoped to this tenant.)
+    # --- Framework ---------------------------------------------------------
+    procurement = call(
+        "POST",
+        "/procurements",
+        "/procurements",
+        201,
+        headers=headers,
+        json={"title": "Completeness Walk", "reference": f"CW-{uuid.uuid4().hex[:8]}"},
+    )
+    pid = str(procurement["id"])  # type: ignore[call-overload]
+    call(
+        "POST", f"/procurements/{pid}/lots", "/procurements/{procurement_id}/lots",
+        201, headers=headers, json={"lot_number": 1, "title": "Lot One"},
+    )
+    criterion = call(
+        "POST",
+        f"/procurements/{pid}/criteria",
+        "/procurements/{procurement_id}/criteria",
+        201,
+        headers=headers,
+        json={
+            "ref": "Q1",
+            "title": "Mobilisation",
+            "weighting_pct": "60",
+            "word_limit": 400,
+            "descriptors": [
+                {"band": 1, "label": "Poor", "descriptor_text": "Addresses little."},
+                {"band": 3, "label": "Good", "descriptor_text": "Meets the requirement."},
+                {"band": 5, "label": "Excellent", "descriptor_text": "Exceeds it."},
+            ],
+            "requirements": [{"ref": "R1", "text": "A mobilisation plan with named leads."}],
+        },
+    )
+    criterion_id = str(criterion["id"])  # type: ignore[call-overload]
+    call(
+        "POST",
+        f"/procurements/{pid}/framework/extract",
+        "/procurements/{procurement_id}/framework/extract",
+        200,
+        headers=headers,
+        json={"document_text": "Award criteria: quality 60 per cent, price 40."},
+    )
+    call(
+        "POST",
+        f"/procurements/{pid}/framework/lock",
+        "/procurements/{procurement_id}/framework/lock",
+        200,
+        headers=headers,
+    )
+
+    # --- Bidder and submission ----------------------------------------------
+    bidder = call(
+        "POST",
+        f"/procurements/{pid}/bidders",
+        "/procurements/{procurement_id}/bidders",
+        201,
+        headers=headers,
+        json={"legal_name": "Walkthrough Bidder Limited", "companies_house_no": "01234567"},
+    )
+    bidder_id = str(bidder["id"])  # type: ignore[call-overload]
+    submission = call(
+        "POST",
+        f"/bidders/{bidder_id}/submissions",
+        "/bidders/{bidder_id}/submissions",
+        201,
+        headers=headers,
+        files={"file": ("answer.txt", io.BytesIO(SUBMISSION_TEXT.encode()), "text/plain")},
+    )
+    submission_id = str(submission["id"])  # type: ignore[call-overload]
+    call(
+        "POST",
+        f"/submissions/{submission_id}/ingest",
+        "/submissions/{submission_id}/ingest",
+        202,
+        headers=headers,
+    )
+    assert run_all_jobs() >= 1
+
+    # --- Calibration ---------------------------------------------------------
+    benchmark = call(
+        "POST",
+        f"/procurements/{pid}/calibration/benchmarks",
+        "/procurements/{procurement_id}/calibration/benchmarks",
+        201,
+        headers=headers,
+        json={
+            "criterion_id": criterion_id,
+            "title": "Benchmark one",
+            "answer_text": "A thorough answer naming leads and timescales.",
+            # Deliberately two bands from the engine's score of 3, so the
+            # accept-divergence route is exercised meaningfully.
+            "buyer_score": 1,
+        },
+    )
+    benchmark_id = str(benchmark["id"])  # type: ignore[call-overload]
+    call(
+        "POST",
+        f"/procurements/{pid}/calibration/run",
+        "/procurements/{procurement_id}/calibration/run",
+        200,
+        headers=headers,
+    )
+    blocked = client.post(f"/procurements/{pid}/scoring/runs", headers=headers)
+    assert blocked.status_code == 409, "Unreviewed divergence must block scoring."
+    call(
+        "POST",
+        f"/procurements/{pid}/calibration/benchmarks/{benchmark_id}/accept-divergence",
+        "/procurements/{procurement_id}/calibration/benchmarks/{benchmark_id}/accept-divergence",
+        204,
+        headers=headers,
+        json={"rationale": "Reviewed: the benchmark answer was deliberately under-scored."},
+    )
+
+    # --- Scoring --------------------------------------------------------------
+    call(
+        "POST",
+        f"/procurements/{pid}/scoring/runs",
+        "/procurements/{procurement_id}/scoring/runs",
+        202,
+        headers=headers,
+    )
+    assert run_all_jobs() >= 1
+
+    recommendations = client.get(
+        f"/procurements/{pid}/recommendations", headers=headers
+    ).json()
+    assert len(recommendations) == 1, recommendations
+    recommendation = recommendations[0]
+    assert recommendation["score"] == 3
+    assert recommendation["confidence_tier"] == "converged"
+
+    # --- Moderation -------------------------------------------------------------
+    call(
+        "POST",
+        f"/recommendations/{recommendation['id']}/moderate",
+        "/recommendations/{recommendation_id}/moderate",
+        201,
+        headers=headers,
+        json={
+            "action": "amend",
+            "final_score": 5,
+            "rationale": "The panel agreed the evidence supports the higher band.",
+        },
+    )
+
+    # --- Pack generation -----------------------------------------------------------
+    call(
+        "POST",
+        f"/procurements/{pid}/packs/moderation",
+        "/procurements/{procurement_id}/packs/moderation",
+        202,
+        headers=headers,
+        json={"format": "docx"},
+    )
+    assert run_all_jobs() >= 1
+    packs = client.get(f"/procurements/{pid}/packs/moderation", headers=headers).json()
+    assert len(packs) == 1
+
+    # The pack is provably derived from the record: every paragraph matches
+    # a record-derived expectation (M8 exit criterion).
+    pack_bytes = memory_storage.objects[packs[0]["object_key"]]  # type: ignore[attr-defined]
+    paragraphs = [
+        paragraph.text
+        for paragraph in Document(io.BytesIO(pack_bytes)).paragraphs
+        if paragraph.text.strip()
+    ]
+    assert any("Completeness Walk" in text for text in paragraphs)
+    assert any("Recommended score: 3" in text for text in paragraphs)
+    assert any("final score 5" in text for text in paragraphs)
+    assert any(
+        "The panel agreed the evidence supports the higher band." in text
+        for text in paragraphs
+    )
+    allowed_markers = (
+        "Moderation pack", "Procurement:", "Reference:", "Framework lock hash:",
+        "Pinned model version:", "Generated at:", "Every entry below",
+        "Q1 Mobilisation", "Recommended score:", "Moderation:",
+        "Moderator's rationale:", "Recommendation justification:",
+    )
+    for text in paragraphs:
+        assert any(text.startswith(marker) for marker in allowed_markers), (
+            f"Pack contains un-recorded free text: '{text[:80]}'"
+        )
+
+    # --- Anonymisation reveal ---------------------------------------------------------
+    call(
+        "POST",
+        f"/procurements/{pid}/anonymisation/reveal",
+        "/procurements/{procurement_id}/anonymisation/reveal",
+        200,
+        headers=headers,
+    )
+
+    # --- Coverage and chain verification ------------------------------------------------
+    uncovered = _mutating_routes(client.app) - covered  # type: ignore[arg-type]
+    assert not uncovered, (
+        f"Mutating routes not covered by the audit-completeness walk: {uncovered}. "
+        "Extend this test when adding endpoints."
+    )
     report = verify_scope(db_session, provisioned.tenant.id)
     assert report.valid, f"Chain {report.scope} failed verification: {report.detail}"
 
 
 @pytest.fixture
-def client_with_unaudited_routes() -> Iterator[TestClient]:
+def client_with_unaudited_routes(migrated_database: None) -> Iterator[TestClient]:
     """An app with deliberately defective endpoints for enforcement tests."""
     app = create_app()
 

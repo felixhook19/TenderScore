@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.audit.models import AuditEvent
 from app.audit.recorder import AuditRecorder
 from app.tenancy.service import TenantProvisioningError, create_tenant
-from tests.integration.conftest import TenantFactory
+from tests.conftest import TenantFactory
 
 
 def test_provisioning_creates_the_schema(

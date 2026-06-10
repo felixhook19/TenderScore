@@ -52,6 +52,10 @@ class AuditRecorder:
         self._on_record = on_record
         self.count = 0
 
+    @property
+    def tenant_id(self) -> uuid.UUID | None:
+        return self._tenant_id
+
     def record(
         self,
         action: str,

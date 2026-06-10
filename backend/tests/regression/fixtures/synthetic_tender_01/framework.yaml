@@ -1,0 +1,120 @@
+# Synthetic Tender 01 — Grounds Maintenance Services
+# Entirely fictional: a made-up district council, invented bidders, invented
+# content. No resemblance to any real tender or bid (Hard Rule 7).
+procurement:
+  title: Grounds Maintenance Services
+  reference: SDC-2026-GM-014
+  regime: PA23
+
+lots:
+  - lot_number: 1
+    title: Parks and Open Spaces (North)
+  - lot_number: 2
+    title: Highways Verges and Closed Churchyards (South)
+
+# 60/40 quality/price. Quality criteria sum to 60; price to 40.
+criteria:
+  - ref: Q1
+    title: Mobilisation and Service Delivery
+    weighting_pct: 15
+    word_limit: 500
+    descriptors: &standard_descriptors
+      - band: 0
+        label: Unacceptable
+        descriptor_text: Fails to address the question or provides no relevant evidence of capability.
+      - band: 1
+        label: Poor
+        descriptor_text: Addresses the question only in part, with serious omissions or unsupported assertions in place of evidence.
+      - band: 2
+        label: Weak
+        descriptor_text: Addresses most of the question but with material weaknesses, limited evidence and little tailoring to the council's requirement.
+      - band: 3
+        label: Good
+        descriptor_text: Fully meets the requirement with adequate detail, relevant evidence and a credible approach tailored to the council's requirement.
+      - band: 4
+        label: Very good
+        descriptor_text: Fully meets the requirement with strong, specific evidence, clear ownership and measures that exceed the specification in places.
+      - band: 5
+        label: Excellent
+        descriptor_text: Comprehensively exceeds the requirement with compelling evidence, innovation and clearly articulated added value at no additional cost.
+    requirements:
+      - ref: R1
+        text: A mobilisation plan covering the first ninety days with named responsibilities.
+      - ref: R2
+        text: Service delivery schedules for each lot including seasonal variation.
+      - ref: R3
+        text: Contingency arrangements for severe weather and equipment failure.
+  - ref: Q2
+    title: Workforce
+    weighting_pct: 10
+    descriptors: *standard_descriptors
+  - ref: Q2.1
+    parent_ref: Q2
+    title: Staffing and Training
+    weighting_pct: 6
+    word_limit: 400
+    descriptors: *standard_descriptors
+    requirements:
+      - ref: R4
+        text: Staffing levels and structure for each lot.
+      - ref: R5
+        text: Training and competence arrangements including spraying certification.
+  - ref: Q2.2
+    parent_ref: Q2
+    title: Supervision and Welfare
+    weighting_pct: 4
+    word_limit: 300
+    descriptors: *standard_descriptors
+  - ref: Q3
+    title: Quality Management
+    weighting_pct: 10
+    descriptors: *standard_descriptors
+  - ref: Q3.1
+    parent_ref: Q3
+    title: Quality Assurance Systems
+    weighting_pct: 5
+    word_limit: 400
+    descriptors: *standard_descriptors
+    requirements:
+      - ref: R6
+        text: A quality management system covering inspection and rectification.
+  - ref: Q3.2
+    parent_ref: Q3
+    title: Performance Monitoring and Reporting
+    weighting_pct: 5
+    word_limit: 400
+    descriptors: *standard_descriptors
+  - ref: Q4
+    title: Environmental Management and Sustainability
+    weighting_pct: 10
+    word_limit: 450
+    descriptors: *standard_descriptors
+    requirements:
+      - ref: R7
+        text: Reduction of pesticide use and protection of pollinator habitats.
+      - ref: R8
+        text: Fleet emissions reduction over the contract term.
+  - ref: Q5
+    title: Social Value
+    weighting_pct: 5
+    word_limit: 300
+    descriptors: *standard_descriptors
+  - ref: Q6
+    title: Health and Safety
+    weighting_pct: 10
+    word_limit: 400
+    is_gate: true
+    gate_rule:
+      type: min_score
+      value: 2
+    descriptors: *standard_descriptors
+    requirements:
+      - ref: R9
+        text: Safe systems of work for operations beside live carriageways.
+      - ref: R10
+        text: Accident reporting and RIDDOR compliance arrangements.
+  - ref: P1
+    title: Price
+    weighting_pct: 40
+    price_criterion: true
+    descriptors: []

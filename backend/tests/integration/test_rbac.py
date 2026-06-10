@@ -6,7 +6,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.auth.roles import PRIVILEGE_ANONYMISATION_MAP_READ
-from tests.integration.conftest import TenantFactory, bearer, login
+from tests.conftest import TenantFactory, bearer, login
 
 # Routes that are reachable without authentication, and nothing else.
 UNAUTHENTICATED_ALLOWLIST = {
@@ -16,10 +16,19 @@ UNAUTHENTICATED_ALLOWLIST = {
 }
 
 _PATH_PARAM_SUBSTITUTES = {
-    "user_id": str(uuid.uuid4()),
     "role": "admin",
     "privilege": "anonymisation_map.read",
 }
+
+
+def _fill_path_params(path: str) -> str:
+    import re
+
+    return re.sub(
+        r"\{(\w+)\}",
+        lambda match: _PATH_PARAM_SUBSTITUTES.get(match.group(1), str(uuid.uuid4())),
+        path,
+    )
 
 
 def test_every_route_denies_unauthenticated_access_by_default(client: TestClient) -> None:
@@ -29,9 +38,7 @@ def test_every_route_denies_unauthenticated_access_by_default(client: TestClient
     assert routes, "No routes found to walk."
 
     for route in routes:
-        path = route.path
-        for name, value in _PATH_PARAM_SUBSTITUTES.items():
-            path = path.replace("{" + name + "}", value)
+        path = _fill_path_params(route.path)
         for method in route.methods or set():
             if (method, route.path) in UNAUTHENTICATED_ALLOWLIST:
                 continue

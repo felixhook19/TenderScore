@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from tests.integration.conftest import TenantFactory, bearer, login
+from tests.conftest import TenantFactory, bearer, login
 
 
 def test_audit_listing_requires_an_audit_role(

@@ -14,7 +14,17 @@ from app.core.config import get_settings
 
 
 class Base(DeclarativeBase):
-    """Declarative base for all mapped classes."""
+    """Declarative base for platform-schema mapped classes."""
+
+
+class TenantBase(DeclarativeBase):
+    """Declarative base for tenant-schema tables.
+
+    Tables are declared without a schema; at runtime every query runs
+    through a connection whose `schema_translate_map` maps None to the
+    current tenant's schema (see ADR-003). Provisioning creates these
+    tables in each new tenant schema at the current head state.
+    """
 
 
 _engine: Engine | None = None
@@ -53,3 +63,14 @@ def session_scope() -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+def tenant_session(schema_name: str) -> Session:
+    """A session whose unqualified tables resolve to one tenant's schema.
+
+    Platform tables carry an explicit schema and are unaffected; tenant
+    tables (TenantBase) translate to `schema_name`. The caller owns commit
+    and close.
+    """
+    engine = get_engine().execution_options(schema_translate_map={None: schema_name})
+    return Session(bind=engine, expire_on_commit=False)

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.audit.hashing import state_hash
 from app.audit.recorder import AuditRecorder
 from app.tenancy.models import Tenant
+from app.tenancy.schema import create_tenant_tables
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 _SCHEMA_PREFIX = "tenant_"
@@ -55,6 +56,7 @@ def create_tenant(session: Session, recorder: AuditRecorder, name: str) -> Tenan
 
     # schema_name is derived above from a strict [a-z0-9_] slug; quote anyway.
     session.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
+    create_tenant_tables(session.connection(), schema_name)
 
     recorder.record(
         "tenant.provisioned",

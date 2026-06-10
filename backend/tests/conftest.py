@@ -8,7 +8,7 @@ fail — never skip — if the database is unreachable: run `make dev` or
 
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import pyotp
 import pytest
@@ -31,7 +31,7 @@ from app.tenancy.service import create_tenant
 TEST_DATABASE = "tenderscore_test"
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def migrated_database() -> Iterator[None]:
     """Create a dedicated test database and migrate it to head."""
     base_url = make_url(get_settings().database_url)
@@ -62,7 +62,7 @@ def migrated_database() -> Iterator[None]:
 
 
 @pytest.fixture
-def db_session() -> Iterator[Session]:
+def db_session(migrated_database: None) -> Iterator[Session]:
     session = get_session_factory()()
     try:
         yield session
@@ -72,7 +72,7 @@ def db_session() -> Iterator[Session]:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(migrated_database: None) -> Iterator[TestClient]:
     from app.main import create_app
 
     with TestClient(create_app()) as test_client:
@@ -80,7 +80,7 @@ def client() -> Iterator[TestClient]:
 
 
 @pytest.fixture
-def make_tenant_with_admin() -> Iterator[
+def make_tenant_with_admin(migrated_database: None) -> Iterator[
     "TenantFactory"
 ]:
     factory = TenantFactory()
@@ -124,6 +124,78 @@ class TenantFactory:
 
     def close(self) -> None:
         self._session.close()
+
+
+@pytest.fixture
+def memory_storage() -> "Iterator[object]":
+    from app.ingestion.storage import MemoryObjectStorage, set_object_storage
+
+    storage = MemoryObjectStorage()
+    set_object_storage(storage)
+    yield storage
+    set_object_storage(None)
+
+
+@pytest.fixture
+def use_fake_llm() -> Iterator["FakeLLMInstaller"]:
+    installer = FakeLLMInstaller()
+    yield installer
+    installer.uninstall()
+
+
+class FakeLLMInstaller:
+    """Installs a deterministic fake adapter behind the gateway seam."""
+
+    def __init__(self) -> None:
+        self.adapter: object | None = None
+
+    def install(self, respond: object) -> "object":
+
+        from app.llm_gateway.adapters import DeterministicFakeAdapter
+        from app.scoring import jobs as scoring_jobs
+
+        assert callable(respond) or respond is None
+        adapter = DeterministicFakeAdapter(
+            respond if respond is None else self._as_callable(respond)
+        )
+        scoring_jobs.set_adapter(adapter)
+        self.adapter = adapter
+        return adapter
+
+    @staticmethod
+    def _as_callable(respond: object) -> Callable[[str, str], str]:
+        def call(system: str, user_content: str) -> str:
+            return str(respond(system, user_content))  # type: ignore[operator]
+
+        return call
+
+    def uninstall(self) -> None:
+        from app.scoring import jobs as scoring_jobs
+
+        scoring_jobs.set_adapter(None)
+
+
+def run_all_jobs(max_seconds: float = 15.0) -> int:
+    """Drain the job queue synchronously; returns the number of jobs run."""
+    import time
+
+    from app.jobs.runner import run_one
+    from app.jobs.worker import register_all_handlers
+
+    register_all_handlers()
+    executed = 0
+    deadline = time.monotonic() + max_seconds
+    idle_cycles = 0
+    while time.monotonic() < deadline:
+        if run_one("test-worker"):
+            executed += 1
+            idle_cycles = 0
+            continue
+        idle_cycles += 1
+        if idle_cycles > 5:
+            break
+        time.sleep(0.1)
+    return executed
 
 
 def login(client: TestClient, user: User, password: str) -> str:
