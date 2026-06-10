@@ -15,6 +15,21 @@ AI scores, humans moderate, AI documents.
 2. Read `docs/architecture.md` — the full P2 architecture and the M0–M10 build plan.
 3. First task for Claude Code: execute **Milestone M0** (Part I / Part L of the architecture doc).
 
+## Quick start
+
+Requires Docker, [uv](https://docs.astral.sh/uv/) and Node 22.
+
+```sh
+make dev          # boot the full local stack (db, minio, api, worker, web)
+make test         # backend pytest + frontend vitest (incl. axe-core)
+make lint         # ruff + mypy --strict + tsc --noEmit
+make regression   # synthetic tender regression suite (fails loudly until M5)
+make redteam      # injection red-team suite (fails loudly until M2+)
+```
+
+API: http://localhost:8000 (health at `/health`) · Web: http://localhost:5173
+· MinIO console: http://localhost:9001.
+
 ## Ground rules (summary — CLAUDE.md governs)
 
 - Append-only, hash-chained audit trail; no state change without an event.

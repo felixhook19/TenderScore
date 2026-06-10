@@ -1,0 +1,24 @@
+# Secrets — environment variables only, never committed
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Tooling and editors
+.DS_Store
+.idea/
+.vscode/
+*.log

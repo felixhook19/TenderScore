@@ -1,0 +1,96 @@
+# TenderScore local development stack. Docker Compose is the only
+# infrastructure until the cloud provider decision (Open Decision #4) lands —
+# do not add provider-specific configuration here.
+name: tenderscore
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tenderscore
+      POSTGRES_PASSWORD: tenderscore # development only — never reuse outside Compose
+      POSTGRES_DB: tenderscore
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tenderscore"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: tenderscore
+      MINIO_ROOT_PASSWORD: tenderscore-dev # development only
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      args:
+        # Only needed behind a TLS-intercepting development proxy.
+        EXTRA_CA_CERT: ${TENDERSCORE_BUILD_EXTRA_CA_CERT:-}
+    environment:
+      TENDERSCORE_DATABASE_URL: postgresql+psycopg://tenderscore:tenderscore@db:5432/tenderscore
+      TENDERSCORE_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      TENDERSCORE_OBJECT_STORAGE_ACCESS_KEY: tenderscore
+      TENDERSCORE_OBJECT_STORAGE_SECRET_KEY: tenderscore-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/srv/backend/app
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command:
+      ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  worker:
+    build:
+      context: ./backend
+      args:
+        EXTRA_CA_CERT: ${TENDERSCORE_BUILD_EXTRA_CA_CERT:-}
+    environment:
+      TENDERSCORE_DATABASE_URL: postgresql+psycopg://tenderscore:tenderscore@db:5432/tenderscore
+      TENDERSCORE_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      TENDERSCORE_OBJECT_STORAGE_ACCESS_KEY: tenderscore
+      TENDERSCORE_OBJECT_STORAGE_SECRET_KEY: tenderscore-dev
+    volumes:
+      - ./backend/app:/srv/backend/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["uv", "run", "python", "-m", "app.jobs.worker"]
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        EXTRA_CA_CERT: ${TENDERSCORE_BUILD_EXTRA_CA_CERT:-}
+    environment:
+      TENDERSCORE_API_URL: http://api:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/srv/frontend/src
+    depends_on:
+      - api
+
+volumes:
+  db_data:
+  minio_data:
