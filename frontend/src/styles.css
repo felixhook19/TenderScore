@@ -1,0 +1,119 @@
+/* Accessible base styles: visible focus, AA contrast, readable measure. */
+
+:root {
+  color-scheme: light;
+  --ink: #1a1a1a;
+  --paper: #ffffff;
+  --accent: #00437a;
+  --line: #767676;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 70rem;
+  padding: 0 1.5rem 3rem;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+header,
+footer {
+  padding: 1rem 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+th {
+  background: #f3f2f1;
+}
+
+button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  background: var(--accent);
+  color: #ffffff;
+  border: 2px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #595959;
+  cursor: not-allowed;
+}
+
+.field {
+  margin-block: 0.75rem;
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+}
+
+input,
+textarea {
+  font: inherit;
+  padding: 0.35rem;
+  border: 2px solid var(--ink);
+  border-radius: 2px;
+  max-width: 28rem;
+  width: 100%;
+}
+
+input[type="radio"] {
+  width: auto;
+  margin-inline-end: 0.5rem;
+}
+
+.field:has(input[type="radio"]) label {
+  display: inline;
+  font-weight: 400;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 2rem;
+}
+
+.awarded-band {
+  border-inline-start: 4px solid var(--accent);
+  padding-inline-start: 0.75rem;
+}
+
+blockquote {
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.75rem;
+  border-inline-start: 4px solid var(--line);
+  background: #f3f2f1;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
