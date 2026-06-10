@@ -39,7 +39,9 @@ jobs:
       - name: mypy --strict
         run: uv run mypy
       - name: pytest (with the legally load-bearing coverage floor)
-        run: uv run pytest --cov=app.audit --cov-report=term --cov-fail-under=85
+        run: >
+          uv run pytest --cov=app.audit --cov=app.llm_gateway --cov=app.scoring
+          --cov-report=term --cov-fail-under=85
 
   frontend:
     name: Frontend (tsc --noEmit, vitest + axe-core)
