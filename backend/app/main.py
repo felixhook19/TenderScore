@@ -21,6 +21,7 @@ from app.auth.router import router as auth_router
 from app.compliance.router import router as compliance_router
 from app.core.config import get_settings
 from app.core.db import get_session_factory
+from app.core.hardening import AuthRateLimitMiddleware, install_log_scrubbing
 from app.documents.router import router as documents_router
 from app.framework.router import router as framework_router
 from app.ingestion.router import router as ingestion_router
@@ -41,6 +42,7 @@ class HealthResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     assert_provider_safety(get_settings())
+    install_log_scrubbing()
     session = get_session_factory()()
     try:
         reconcile(session)
@@ -59,6 +61,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(AuditCompletenessMiddleware)
+    app.add_middleware(AuthRateLimitMiddleware)
 
     @app.exception_handler(MissingAuditEventError)
     async def _missing_audit_event(

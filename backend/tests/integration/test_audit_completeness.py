@@ -327,6 +327,12 @@ def test_every_mutating_route_emits_audit_events(
         headers=headers,
     )
 
+    # --- Sign out -----------------------------------------------------------------------
+    call("POST", "/auth/logout", "/auth/logout", 200, headers=headers)
+    assert client.get("/me", headers=headers).status_code == 401, (
+        "A revoked session must stop working immediately."
+    )
+
     # --- Coverage and chain verification ------------------------------------------------
     uncovered = _mutating_routes(client.app) - covered  # type: ignore[arg-type]
     assert not uncovered, (

@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     totp_challenge_ttl_minutes: int = 5
     bcrypt_rounds: int = 12
 
+    # Authentication hardening (M10).
+    auth_rate_limit_attempts: int = 30
+    auth_rate_limit_window_seconds: int = 60
+    lockout_failed_attempts: int = 5
+    lockout_window_minutes: int = 15
+
 
 @lru_cache
 def get_settings() -> Settings:
