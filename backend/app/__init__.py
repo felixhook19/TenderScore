@@ -1,0 +1,1 @@
+"""TenderScore backend application package."""
