@@ -22,3 +22,8 @@ frontend/dist/
 .idea/
 .vscode/
 *.log
+
+# Coverage artefacts
+.coverage
+coverage.xml
+htmlcov/
