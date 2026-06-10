@@ -9,6 +9,20 @@ jobs:
   backend:
     name: Backend (ruff, mypy --strict, pytest)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tenderscore
+          POSTGRES_PASSWORD: tenderscore
+          POSTGRES_DB: tenderscore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tenderscore"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -24,8 +38,8 @@ jobs:
         run: uv run ruff check .
       - name: mypy --strict
         run: uv run mypy
-      - name: pytest
-        run: uv run pytest
+      - name: pytest (with the legally load-bearing coverage floor)
+        run: uv run pytest --cov=app.audit --cov-report=term --cov-fail-under=85
 
   frontend:
     name: Frontend (tsc --noEmit, vitest + axe-core)

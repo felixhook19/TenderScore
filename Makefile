@@ -11,7 +11,8 @@ dev-down: ## Stop the local stack
 
 test: test-backend test-frontend ## Run all unit and integration tests
 
-test-backend:
+test-backend: ## Integration tests need PostgreSQL; start it when Docker is available
+	@docker compose up -d --wait db 2>/dev/null || true
 	cd backend && uv run pytest
 
 test-frontend:

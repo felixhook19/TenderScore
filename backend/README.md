@@ -7,11 +7,11 @@ Python 3.12 · FastAPI · SQLAlchemy 2.0 · Alembic · Pydantic v2.
 
 | Path | Purpose | Built in |
 |---|---|---|
-| `app/main.py` | FastAPI app factory + health endpoint | M0 |
-| `app/core/` | Configuration, security, tenancy resolution | M0+ |
-| `app/audit/` | Event schema, middleware, hash chain, verifier | M1 |
-| `app/auth/` | IdentityProvider interface, dev provider, RBAC | M1 |
-| `app/tenancy/` | Tenant lifecycle, schema provisioning | M1 |
+| `app/main.py` | FastAPI app factory + health endpoint | M0 ✓ |
+| `app/core/` | Configuration, database engine/session | M0 ✓ |
+| `app/audit/` | Event schema, middleware, hash chain, verifier | M1 ✓ |
+| `app/auth/` | IdentityProvider interface, dev provider, RBAC | M1 ✓ |
+| `app/tenancy/` | Tenant lifecycle, schema provisioning, bootstrap CLI | M1 ✓ |
 | `app/ingestion/` | Upload, parse (PDF/DOCX), split, normalise, hash | M2 |
 | `app/framework/` | Procurements, lots, criteria tree, descriptors, lock | M3 |
 | `app/llm_gateway/` | Provider abstraction, prompt registry, injection scan | M4 |
