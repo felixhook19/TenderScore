@@ -19,16 +19,30 @@ from app.moderation import models as _moderation_models  # noqa: F401
 from app.scoring import models as _scoring_models  # noqa: F401
 
 
+def _with_schema(connection: Connection, schema_name: str, create: bool) -> None:
+    # Connection.execution_options mutates the connection in place, so the
+    # previous translate map must be restored afterwards — otherwise the
+    # caller's subsequent unqualified statements (for example alembic's own
+    # version table) are silently redirected into the tenant schema.
+    previous = connection.get_execution_options().get("schema_translate_map")
+    connection.execution_options(schema_translate_map={None: schema_name})
+    try:
+        if create:
+            TenantBase.metadata.create_all(connection)
+        else:
+            TenantBase.metadata.drop_all(connection)
+    finally:
+        connection.execution_options(schema_translate_map=previous or {})
+
+
 def create_tenant_tables(connection: Connection, schema_name: str) -> None:
     """Create all tenant tables in the given schema at head state."""
-    translated = connection.execution_options(schema_translate_map={None: schema_name})
-    TenantBase.metadata.create_all(translated)
+    _with_schema(connection, schema_name, create=True)
 
 
 def drop_tenant_tables(connection: Connection, schema_name: str) -> None:
     """Drop all tenant tables in the given schema (migration downgrades)."""
-    translated = connection.execution_options(schema_translate_map={None: schema_name})
-    TenantBase.metadata.drop_all(translated)
+    _with_schema(connection, schema_name, create=False)
 
 
 def list_tenant_schemas(connection: Connection) -> list[str]:
