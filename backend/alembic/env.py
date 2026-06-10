@@ -1,8 +1,6 @@
 """Alembic migration environment.
 
-M0 scope: wired to the application settings but with no models yet —
-`target_metadata` is populated from M1 onwards. All migrations must be
-reversible (CLAUDE.md).
+All migrations must be reversible (CLAUDE.md).
 """
 
 from logging.config import fileConfig
@@ -10,15 +8,18 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.audit import models as audit_models  # noqa: F401  (register mappings)
+from app.auth import models as auth_models  # noqa: F401
 from app.core.config import get_settings
+from app.core.db import Base
+from app.tenancy import models as tenancy_models  # noqa: F401
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Populated from M1 onwards as models land.
-target_metadata = None
+target_metadata = Base.metadata
 
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 

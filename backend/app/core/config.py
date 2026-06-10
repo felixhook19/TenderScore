@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     object_storage_secret_key: str = ""
     object_storage_bucket: str = "tenderscore-dev"
 
+    platform_schema: str = "platform"
+
+    session_ttl_minutes: int = 720
+    totp_challenge_ttl_minutes: int = 5
+    bcrypt_rounds: int = 12
+
 
 @lru_cache
 def get_settings() -> Settings:

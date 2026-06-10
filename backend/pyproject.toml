@@ -9,14 +9,17 @@ dependencies = [
     "sqlalchemy>=2.0.36",
     "alembic>=1.14",
     "psycopg[binary]>=3.2",
-    "pydantic>=2.10",
+    "pydantic[email]>=2.10",
     "pydantic-settings>=2.6",
+    "bcrypt>=4.2",
+    "pyotp>=2.9",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
     "httpx>=0.28",
     "ruff>=0.8",
     "mypy>=1.13",
@@ -47,7 +50,8 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert is the point of tests
+# Asserts are the point of tests; fixture credentials are synthetic by rule.
+"tests/**" = ["S101", "S105", "S106"]
 
 [tool.mypy]
 python_version = "3.12"
